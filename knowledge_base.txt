@@ -1,0 +1,27 @@
+# My Knowledge Base
+# Add your notes below. The chatbot will use this file to answer your questions.
+
+## Python
+Python is a high-level, interpreted programming language known for its simplicity and readability.
+It supports multiple programming paradigms including procedural, object-oriented, and functional programming.
+Python uses indentation to define code blocks instead of curly braces.
+The Python Package Index (PyPI) hosts thousands of third-party packages for Python.
+
+## LangChain
+LangChain is a framework for developing applications powered by large language models (LLMs).
+It provides tools for chaining together LLM calls, managing prompts, and integrating with vector databases.
+LangChain supports retrieval-augmented generation (RAG) which combines document retrieval with LLM generation.
+
+## Vector Databases
+Vector databases store data as high-dimensional vectors (embeddings) for semantic similarity search.
+ChromaDB is a lightweight, open-source vector database that can run locally without any external services.
+Embeddings are numerical representations of text that capture semantic meaning.
+Similar texts will have vectors that are close together in the embedding space.
+
+## Gemini
+Google Gemini is a family of multimodal AI models developed by Google DeepMind.
+Gemini offers a free API tier through Google AI Studio for developers to get started.
+The Gemini API supports text generation, embeddings, and multi-turn conversations.
+
+## Kris Isidore Penida
+2nd Year BSCE Student, Mother and Father are from the LTO, 20 years old
