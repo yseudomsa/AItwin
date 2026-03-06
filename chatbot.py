@@ -5,6 +5,8 @@ Data source: Plain text notepad file
 Interface: Terminal / CLI
 """
 
+import json
+import redis
 import os
 import sys
 from pathlib import Path
@@ -31,6 +33,10 @@ GEMINI_MODEL    = "gemini-2.5-flash"                   # Free-tier Gemini model
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"  # Local HuggingFace model
 CHUNK_SIZE      = 500
 CHUNK_OVERLAP   = 50
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_TTL = int(os.getenv("REDIS_TTL", "86400"))
+REDIS_KEY = "chatbot:history"
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -50,6 +56,34 @@ def get_api_key() -> str:
         sys.exit(1)
     os.environ["GOOGLE_API_KEY"] = key
     return key
+
+def get_redis_client():
+    """Connect to Redis and verify connection."""
+    try:
+        client = redis.Redis(host = REDIS_HOST, port=REDIS_PORT, decode_responses = True)
+        client.ping()
+        print("Redis connected! - chat history will now persist between sessions.")
+        return client
+    except redis.exceptions.ConnectionError:
+        print("Redis not available! - chat history will only last this session")
+        return None
+
+def load_history(client) -> list:
+    """Load Chat History from Redis."""
+    if not client:
+        return[]
+    raw = client.get(REDIS_KEY)
+    if raw:
+        data = json.loads(raw)
+        print(f"Loadaed {len(data)} previous messages(s) from Reddis.")
+        return data
+    return []
+
+def save_history(client, history: list):
+    """Save chat history with TTL."""
+    if not client:
+        return
+    client.set(REDIS_KEY, json.dumps(history), ex=REDIS_TTL)
 
 
 def load_and_split_notepad(filepath: str):
@@ -96,24 +130,18 @@ def build_vector_store(chunks, embeddings, persist_dir: str) -> Chroma:
     return vectorstore
 
 
-def build_chain(vectorstore: Chroma, llm):
-    """Build the conversational retrieval chain with memory."""
+def build_chain(vectorstore: Chroma, llm, redis_client):
+    """Build the conversational retrieval chain with Redis backed-memory."""
 
     qa_prompt = PromptTemplate(
         input_variables=["context", "question"],
         template="""You are a helpful assistant that answers questions strictly based on the provided context (notes).
 If the answer is not in the context, say "I don't have information about that in my notes."
-Be concise and clear.
-
-Context:
-{context}
-
-Question: {question}
-
+Be concise and clear. Context: {context}, Question: {question}
 Answer:""",
     )
 
-    chat_history = []  # stores (human, ai) tuples in memory
+    chat_history = load_history(redis_client)  # stores (human, ai) tuples in memory
     retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
 
     def chat(user_input: str) -> str:
@@ -126,9 +154,9 @@ Answer:""",
 
         # Build messages with history
         messages = []
-        for human, ai in chat_history:
-            messages.append(HumanMessage(content=human))
-            messages.append(AIMessage(content=ai))
+        for entry in chat_history:
+            messages.append(HumanMessage(content=entry["human"]))
+            messages.append(AIMessage(content=entry["ai"]))
         messages.append(HumanMessage(content=prompt))
 
         # Call LLM
@@ -136,7 +164,8 @@ Answer:""",
         answer = response.content.strip()
 
         # Save to history
-        chat_history.append((user_input, answer))
+        chat_history.append({"human": user_input, "ai": answer})
+        save_history(redis_client, chat_history)
         return answer
 
     return chat
@@ -203,11 +232,12 @@ def main():
     vectorstore = build_vector_store(chunks, embeddings, CHROMA_DB_DIR)
 
     # 4. Build conversational chain
-    chain = build_chain(vectorstore, llm)
+    redis_client = get_redis_client()
 
     # 5. Run CLI chatbot
-    run_chatbot(chain)
+    chain = build_chain(vectorstore, llm, redis_client)
 
+    run_chatbot(chain)
 
 if __name__ == "__main__":
     main()

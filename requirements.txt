@@ -1,3 +1,4 @@
+langchain-core
 langchain>=0.2.0
 langchain-text-splitters>=0.2.0
 langchain-google-genai>=1.0.0
